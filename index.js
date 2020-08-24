@@ -17,8 +17,6 @@ var argv = yargs
     .alias('help', 'h')
     .argv;
 
-console.log(argv);
-
 //  Get the settings
 const settings = {
     mqtt: {
@@ -104,9 +102,15 @@ function authorizeRequest(req, res, next) {
  */
 function checkSingleFileUpload(req, res, next) {
     if (req.query.single) {
-        var upload = multer().single(req.query.single);
-
-        upload(req, res, next);
+        try {
+            //  Upload file
+            var upload = multer().single(req.query.single);
+            upload(req, res, next);
+        } catch (error) {
+            //  Failed to upload file
+            console.error(`Failed to upload file: ${error}`);
+            res.status(500).send('Failed to upload file');
+        }
     }
     else {
         next();
@@ -165,16 +169,28 @@ app.use(bodyParser.json());
  * Send keep-alive message to MQTT broker
  */
 app.get('/keep_alive/', logRequest, function (req, res) {
-    mqttClient.publish(settings.keepalive.topic, settings.keepalive.message);
-    res.sendStatus(200);
+    try {
+        mqttClient.publish(settings.keepalive.topic, settings.keepalive.message);
+        res.sendStatus(200);
+    } catch (error) {
+        //  Failed to publish keep alive message
+        console.error(`Failed to publish keep alive message: ${error}`);
+        res.status(500).send('Failed to publish keep alive message');
+    }
 });
 
 /**
  * Publish a HTPP post request to the MQTT broker
  */
 app.post('/post/', logRequest, authorizeRequest, checkSingleFileUpload, checkMessagePathQueryParameter, checkTopicQueryParameter, ensureTopicSpecified, function (req, res) {
-    mqttClient.publish(req.body['topic'], req.body['message']);
-    res.sendStatus(200);
+    try {
+        mqttClient.publish(req.body['topic'], req.body['message']);
+        res.sendStatus(200);
+    } catch (error) {
+        //  Failed to publish message to topic
+        console.error(`Failed to publish message [${req.body['message']}] to topic [${req.body['topic']}]: ${error}`);
+        res.status(500).send('Failed to publish message to topic');
+    }
 });
 
 /**
@@ -213,6 +229,11 @@ app.get('/subscribe/', logRequest, authorizeRequest, function (req, res) {
 });
 
 //  Start listening
-app.listen(app.get('port'), function () {
-    console.log('http_to_mqtt is running on port', app.get('port'));
-});
+try {
+    app.listen(app.get('port'), function () {
+        console.log('http_to_mqtt is running on port', app.get('port'));
+    });
+} catch (error) {
+    //  Failed to start Express listener
+    console.error(`Failed to start http_to_mqtt bridge: ${error}`);
+}
